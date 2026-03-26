@@ -1,236 +1,929 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Job Hunt Board</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HUNT.OS — Job Intelligence Platform</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
-    /* Score badge colours */
-    .score-high   { background:#dcfce7; color:#166534; }
-    .score-mid    { background:#fef9c3; color:#854d0e; }
-    .score-low    { background:#ffedd5; color:#9a3412; }
-    /* Source pill colours */
-    .src-linkedin { background:#dbeafe; color:#1e40af; }
-    .src-careers24{ background:#f3e8ff; color:#6b21a8; }
-    .src-other    { background:#f3f4f6; color:#374151; }
+    :root {
+      --bg-0: #05060a;
+      --bg-1: #0b0d13;
+      --bg-2: #11141c;
+      --bg-3: #181c27;
+      --border:       #1e2230;
+      --border-hi:    #2a3045;
+      --blue:         #0ea5e9;
+      --blue-dim:     rgba(14,165,233,0.12);
+      --blue-glow:    rgba(14,165,233,0.35);
+      --orange:       #f97316;
+      --orange-dim:   rgba(249,115,22,0.12);
+      --orange-glow:  rgba(249,115,22,0.35);
+      --green:        #22c55e;
+      --purple:       #a855f7;
+      --cyan:         #06b6d4;
+      --text-0: #f1f5f9;
+      --text-1: #94a3b8;
+      --text-2: #3d4d63;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-0);
+      color: var(--text-0);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* CRT scanline */
+    body::after {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 3px,
+        rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 4px
+      );
+    }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-0); }
+    ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+
+    /* ══════════════════════════════════════
+       HEADER
+    ══════════════════════════════════════ */
+    .hud-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 28px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 200;
+    }
+
+    .logo { display: flex; align-items: center; gap: 14px; }
+
+    .logo-hex {
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg, var(--blue), #0284c7);
+      clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 900; color: #000; letter-spacing: -1px;
+      box-shadow: 0 0 18px var(--blue-glow);
+    }
+
+    .logo-name {
+      font-size: 19px; font-weight: 800; letter-spacing: .18em;
+      color: var(--blue);
+      text-shadow: 0 0 24px var(--blue-glow);
+    }
+    .logo-tag { font-size: 9px; letter-spacing: .22em; color: var(--text-2); text-transform: uppercase; margin-top: 1px; }
+
+    .hud-meta { display: flex; align-items: center; gap: 28px; }
+
+    .hud-pill {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 11px; color: var(--text-1); letter-spacing: .05em;
+    }
+    .hud-pill .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--green); box-shadow: 0 0 7px var(--green);
+      animation: blink 2.2s ease-in-out infinite;
+    }
+    .hud-pill .dot.orange { background: var(--orange); box-shadow: 0 0 7px var(--orange-glow); }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+    /* ══════════════════════════════════════
+       LAYOUT
+    ══════════════════════════════════════ */
+    .main { max-width: 1700px; margin: 0 auto; padding: 22px 28px 48px; }
+
+    .section-label {
+      font-size: 9px; letter-spacing: .22em; text-transform: uppercase;
+      color: var(--text-2); margin-bottom: 10px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .section-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+    /* ══════════════════════════════════════
+       STAT CARDS
+    ══════════════════════════════════════ */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 10px; margin-bottom: 18px;
+    }
+
+    .stat-card {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 18px;
+      position: relative; overflow: hidden;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .stat-card:hover { border-color: var(--border-hi); box-shadow: 0 4px 20px rgba(0,0,0,.4); }
+
+    .stat-card::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:2px;
+      background: var(--accent, var(--blue));
+    }
+    .stat-card[data-accent="orange"] { --accent: var(--orange); }
+    .stat-card[data-accent="green"]  { --accent: var(--green); }
+    .stat-card[data-accent="purple"] { --accent: var(--purple); }
+    .stat-card[data-accent="cyan"]   { --accent: var(--cyan); }
+    .stat-card[data-accent="blue"]   { --accent: var(--blue); }
+
+    .stat-lbl {
+      font-size: 9px; letter-spacing: .15em; text-transform: uppercase;
+      color: var(--text-2); margin-bottom: 8px;
+    }
+    .stat-val {
+      font-size: 30px; font-weight: 800; line-height: 1;
+      color: var(--text-0); font-variant-numeric: tabular-nums;
+    }
+    .stat-val.accent { color: var(--accent, var(--blue)); }
+    .stat-sub { font-size: 10px; color: var(--text-2); margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ══════════════════════════════════════
+       INTELLIGENCE GRID (charts + companies)
+    ══════════════════════════════════════ */
+    .intel-grid {
+      display: grid;
+      grid-template-columns: 1.8fr 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .intel-card {
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px 18px;
+    }
+    .intel-card.span2 { grid-column: span 2; }
+    .intel-card.full  { grid-column: 1 / -1; }
+
+    .intel-title {
+      font-size: 9px; letter-spacing: .18em; text-transform: uppercase;
+      color: var(--text-2); margin-bottom: 12px;
+    }
+
+    .chart-wrap { position: relative; height: 170px; }
+
+    /* Companies strip */
+    .companies-strip {
+      display: flex; flex-wrap: wrap; gap: 7px;
+      max-height: 100px; overflow-y: auto;
+    }
+
+    .co-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: var(--bg-3); border: 1px solid var(--border-hi);
+      border-radius: 20px; padding: 4px 10px 4px 8px;
+      font-size: 11px; color: var(--text-1);
+      cursor: pointer; transition: all .15s; user-select: none;
+      white-space: nowrap;
+    }
+    .co-chip:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); }
+    .co-chip.active { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); box-shadow: 0 0 8px var(--blue-glow); }
+    .co-chip-count {
+      font-size: 9px; color: var(--text-2); background: var(--bg-2);
+      padding: 0 5px; border-radius: 8px; font-weight: 700;
+    }
+    .co-chip.active .co-chip-count { color: var(--blue); }
+
+    /* ══════════════════════════════════════
+       FILTER BAR
+    ══════════════════════════════════════ */
+    .filter-bar {
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 18px;
+      display: flex; flex-wrap: wrap; gap: 9px; align-items: center;
+      margin-bottom: 14px; position: sticky; top: 63px; z-index: 100;
+    }
+
+    .filter-bar input[type="text"],
+    .filter-bar select {
+      background: var(--bg-3); border: 1px solid var(--border-hi);
+      color: var(--text-0); border-radius: 6px;
+      padding: 7px 11px; font-size: 12px; outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .filter-bar input[type="text"]:focus,
+    .filter-bar select:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 2px var(--blue-dim);
+    }
+    .filter-bar input[type="text"] { flex: 1; min-width: 200px; }
+    .filter-bar select option { background: #181c27; }
+
+    .f-sep { width: 1px; height: 22px; background: var(--border-hi); flex-shrink: 0; }
+
+    .f-group { display: flex; align-items: center; gap: 7px; }
+    .f-lbl { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-2); white-space: nowrap; }
+
+    input[type="range"] { accent-color: var(--blue); width: 80px; cursor: pointer; }
+    .f-score-val { font-size: 13px; font-weight: 700; color: var(--blue); min-width: 14px; }
+
+    /* Toggle */
+    .toggle { position: relative; width: 34px; height: 18px; }
+    .toggle input { opacity:0; width:0; height:0; }
+    .toggle-track {
+      position: absolute; inset: 0; background: var(--bg-3);
+      border: 1px solid var(--border-hi); border-radius: 18px; cursor: pointer; transition: .2s;
+    }
+    .toggle-thumb {
+      position: absolute; left: 3px; top: 3px; width: 10px; height: 10px;
+      background: var(--text-2); border-radius: 50%; transition: .2s; pointer-events: none;
+    }
+    .toggle input:checked ~ .toggle-track { background: var(--orange); border-color: var(--orange); }
+    .toggle input:checked ~ .toggle-thumb { transform: translateX(16px); background: #fff; }
+
+    /* Active filter count badge */
+    .filter-badge {
+      display: none; align-items: center; justify-content: center;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--orange); color: #000;
+      font-size: 9px; font-weight: 800;
+    }
+    .filter-badge.visible { display: flex; }
+
+    /* ══════════════════════════════════════
+       RESULTS BAR
+    ══════════════════════════════════════ */
+    .results-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px; padding: 0 2px;
+    }
+    .results-count { font-size: 11px; color: var(--text-1); }
+    .results-count strong { color: var(--blue); font-size: 13px; }
+    .clear-btn {
+      font-size: 11px; color: var(--text-2); cursor: pointer;
+      background: none; border: none; text-decoration: underline;
+      display: none;
+    }
+    .clear-btn.visible { display: block; }
+
+    /* ══════════════════════════════════════
+       CARDS GRID
+    ══════════════════════════════════════ */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(370px, 1fr));
+      gap: 10px;
+    }
+
+    .job-card {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--sc, var(--border));
+      border-radius: 8px;
+      display: flex; flex-direction: column;
+      transition: border-color .2s, transform .15s, box-shadow .2s;
+      overflow: hidden; position: relative;
+    }
+    .job-card:hover {
+      border-color: var(--border-hi);
+      border-left-color: var(--sc);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 40px rgba(0,0,0,.5);
+    }
+
+    .card-head { display: flex; align-items: flex-start; gap: 12px; padding: 14px 15px 10px 16px; }
+
+    .card-info { flex: 1; min-width: 0; }
+
+    .card-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+
+    .badge {
+      font-size: 9px; font-weight: 700; letter-spacing: .06em;
+      padding: 2px 8px; border-radius: 20px;
+      white-space: nowrap; border: 1px solid transparent;
+    }
+    .badge-new {
+      background: var(--orange-dim); color: var(--orange);
+      border-color: rgba(249,115,22,.3);
+      animation: new-glow 2s ease-in-out infinite;
+    }
+    @keyframes new-glow {
+      0%,100%{ box-shadow: 0 0 0 0 var(--orange-glow); }
+      50%    { box-shadow: 0 0 6px 2px var(--orange-glow); }
+    }
+    .badge-linkedin  { background:rgba(14,165,233,.1); color:#38bdf8; border-color:rgba(14,165,233,.2); }
+    .badge-careers24 { background:rgba(168,85,247,.1);  color:#c084fc; border-color:rgba(168,85,247,.2); }
+    .badge-other     { background:rgba(148,163,184,.07); color:var(--text-1); border-color:var(--border); }
+    .badge-cat       { background:rgba(6,182,212,.08);   color:#22d3ee; border-color:rgba(6,182,212,.15); }
+
+    .card-title { font-size: 14px; font-weight: 600; line-height: 1.3; margin-bottom: 3px; }
+    .card-company { font-size: 12px; color: var(--text-1); }
+    .card-location { font-size: 11px; color: var(--text-2); margin-top: 2px; }
+
+    /* Score ring */
+    .score-ring { flex-shrink: 0; width: 50px; height: 50px; position: relative; display: flex; align-items: center; justify-content: center; }
+    .score-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+    .score-ring-bg   { stroke: var(--bg-3); }
+    .score-ring-fill { stroke: var(--sc); stroke-linecap: round; filter: drop-shadow(0 0 3px var(--sc)); }
+    .score-num { font-size: 15px; font-weight: 800; line-height: 1; }
+    .score-den { font-size: 8px; color: var(--text-2); text-align: center; margin-top: 1px; }
+
+    .card-reason {
+      padding: 9px 16px 9px 16px;
+      font-size: 11px; color: var(--text-1); font-style: italic; line-height: 1.5;
+      border-top: 1px solid var(--border);
+    }
+
+    .card-foot {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 15px 11px 16px;
+      border-top: 1px solid var(--border); margin-top: auto;
+    }
+    .card-salary  { font-size: 11px; color: #4ade80; font-weight: 600; }
+    .card-date    { font-size: 10px; color: var(--text-2); }
+
+    .apply-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: var(--blue-dim); border: 1px solid var(--blue);
+      color: var(--blue); padding: 6px 14px; border-radius: 5px;
+      font-size: 11px; font-weight: 700; letter-spacing: .05em;
+      text-decoration: none; transition: all .15s; white-space: nowrap;
+    }
+    .apply-btn:hover {
+      background: var(--blue); color: #000;
+      box-shadow: 0 0 18px var(--blue-glow);
+    }
+
+    /* Empty state */
+    .empty-state {
+      grid-column: 1/-1; text-align: center;
+      padding: 80px 20px; color: var(--text-2);
+    }
+    .empty-state h3 { font-size: 17px; color: var(--text-1); margin-bottom: 8px; }
+    .empty-state p  { font-size: 13px; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 1100px) {
+      .stats-row   { grid-template-columns: repeat(3,1fr); }
+      .intel-grid  { grid-template-columns: 1fr 1fr; }
+      .intel-card.full { grid-column: 1/-1; }
+    }
+    @media (max-width: 700px) {
+      .stats-row  { grid-template-columns: repeat(2,1fr); }
+      .intel-grid { grid-template-columns: 1fr; }
+      .intel-card.span2 { grid-column: 1; }
+      .cards-grid { grid-template-columns: 1fr; }
+      .main { padding: 14px 14px 40px; }
+      .hud-header { padding: 10px 14px; }
+    }
   </style>
 </head>
-<body class="bg-gray-50 min-h-screen font-sans antialiased">
+<body>
 
-  <!-- Header -->
-  <header class="bg-white border-b shadow-sm sticky top-0 z-10">
-    <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-      <div>
-        <h1 class="text-xl font-bold text-gray-900">Job Hunt Board</h1>
-        <p class="text-xs text-gray-400 mt-0.5">AI-curated listings · updated daily</p>
+<!-- ═══════════════════════════════════════
+     HEADER
+════════════════════════════════════════ -->
+<header class="hud-header">
+  <div class="logo">
+    <div class="logo-hex">H</div>
+    <div>
+      <div class="logo-name">HUNT.OS</div>
+      <div class="logo-tag">Job Intelligence Platform</div>
+    </div>
+  </div>
+  <div class="hud-meta">
+    <div class="hud-pill"><div class="dot"></div> <span id="hdrDate">Loading…</span></div>
+    <div class="hud-pill"><div class="dot orange"></div> <span id="hdrNew">—</span> new</div>
+    <div class="hud-pill" style="color:var(--text-2)"><span id="hdrTotal">—</span> indexed</div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- ═══ STATS ═══ -->
+  <div class="section-label">System Overview</div>
+  <div class="stats-row">
+    <div class="stat-card" data-accent="blue">
+      <div class="stat-lbl">Total Listings</div>
+      <div class="stat-val" id="sTotal">—</div>
+      <div class="stat-sub">in database</div>
+    </div>
+    <div class="stat-card" data-accent="orange">
+      <div class="stat-lbl">New This Scan</div>
+      <div class="stat-val accent" id="sNew">—</div>
+      <div class="stat-sub" id="sNewDate">latest run</div>
+    </div>
+    <div class="stat-card" data-accent="green">
+      <div class="stat-lbl">Avg Score</div>
+      <div class="stat-val" id="sAvg">—</div>
+      <div class="stat-sub">above threshold</div>
+    </div>
+    <div class="stat-card" data-accent="purple">
+      <div class="stat-lbl">Companies</div>
+      <div class="stat-val" id="sCos">—</div>
+      <div class="stat-sub">unique hiring</div>
+    </div>
+    <div class="stat-card" data-accent="cyan">
+      <div class="stat-lbl">Top Score</div>
+      <div class="stat-val" id="sTopScore">—</div>
+      <div class="stat-sub" id="sTopTitle">—</div>
+    </div>
+    <div class="stat-card" data-accent="blue">
+      <div class="stat-lbl">Sources Active</div>
+      <div class="stat-val" id="sSources">—</div>
+      <div class="stat-sub" id="sSourceNames">—</div>
+    </div>
+  </div>
+
+  <!-- ═══ CHARTS + COMPANIES ═══ -->
+  <div class="section-label">Intelligence Feed</div>
+  <div class="intel-grid">
+
+    <div class="intel-card">
+      <div class="intel-title">Score Distribution</div>
+      <div class="chart-wrap"><canvas id="chartScore"></canvas></div>
+    </div>
+
+    <div class="intel-card">
+      <div class="intel-title">By Role Category</div>
+      <div class="chart-wrap"><canvas id="chartRole"></canvas></div>
+    </div>
+
+    <div class="intel-card">
+      <div class="intel-title">By Region &amp; Source</div>
+      <div class="chart-wrap"><canvas id="chartRegion"></canvas></div>
+    </div>
+
+    <div class="intel-card full">
+      <div class="intel-title">Hiring Companies — click to filter</div>
+      <div class="companies-strip" id="coStrip"></div>
+    </div>
+
+  </div>
+
+  <!-- ═══ FILTERS ═══ -->
+  <div class="section-label">Active Filters</div>
+  <div class="filter-bar">
+    <input type="text" id="search" placeholder="⌕  Search title · company · reason  (press / to focus)">
+
+    <div class="f-sep"></div>
+
+    <select id="fRole"><option value="">All roles</option></select>
+    <select id="fRegion">
+      <option value="">All regions</option>
+      <option value="South Africa">South Africa</option>
+      <option value="Ireland">Ireland</option>
+    </select>
+    <select id="fSource"><option value="">All sources</option></select>
+    <select id="fSort">
+      <option value="score">Sort: Score ↓</option>
+      <option value="date">Sort: Newest first</option>
+      <option value="company">Sort: Company A–Z</option>
+      <option value="alpha">Sort: Title A–Z</option>
+    </select>
+
+    <div class="f-sep"></div>
+
+    <div class="f-group">
+      <span class="f-lbl">Min score</span>
+      <input type="range" id="minScore" min="4" max="10" value="4">
+      <span class="f-score-val" id="minScoreVal">4</span>
+    </div>
+
+    <div class="f-sep"></div>
+
+    <div class="f-group">
+      <label class="toggle">
+        <input type="checkbox" id="newOnly">
+        <div class="toggle-track"></div>
+        <div class="toggle-thumb"></div>
+      </label>
+      <span class="f-lbl">New only</span>
+    </div>
+
+    <div class="filter-badge" id="filterBadge">0</div>
+  </div>
+
+  <!-- ═══ RESULTS BAR ═══ -->
+  <div class="results-bar">
+    <div class="results-count" id="resultsCt"></div>
+    <button class="clear-btn" id="clearBtn" onclick="clearFilters()">Clear all filters</button>
+  </div>
+
+  <!-- ═══ CARDS ═══ -->
+  <div class="cards-grid" id="cardsGrid"></div>
+
+</div><!-- /main -->
+
+<script>
+// ─────────────────────────────────────────────
+//  State
+// ─────────────────────────────────────────────
+let ALL = [];
+let latestDate = '';
+let activeCompany = '';
+let charts = {};
+
+// ─────────────────────────────────────────────
+//  Helpers
+// ─────────────────────────────────────────────
+const esc = s => String(s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+const scoreColor = s =>
+  s >= 9 ? '#22c55e' :
+  s >= 7 ? '#84cc16' :
+  s >= 6 ? '#eab308' :
+  s >= 5 ? '#f97316' : '#ef4444';
+
+const sourceClass = s =>
+  s === 'LinkedIn'  ? 'badge-linkedin'  :
+  s === 'Careers24' ? 'badge-careers24' : 'badge-other';
+
+const category = title => {
+  const t = title.toLowerCase();
+  if (/data.?engineer|pipeline|etl|dbt|airflow|spark/i.test(t)) return 'Data Engineering';
+  if (/data.?scien|machine.?learn|ml engineer|ai engineer/i.test(t)) return 'Data Science';
+  if (/analyst|analytics|business intel|\bbi\b/i.test(t)) return 'Analytics';
+  if (/systems.?eng|infra|devops|platform|sre|site.?reliab/i.test(t)) return 'Systems / Infra';
+  if (/software|developer|backend|frontend|full.?stack/i.test(t)) return 'Software Dev';
+  if (/graduate|trainee|intern/i.test(t)) return 'Graduate / Trainee';
+  return 'Engineering';
+};
+
+// ─────────────────────────────────────────────
+//  Score Ring SVG
+// ─────────────────────────────────────────────
+function scoreRing(score, color) {
+  const r = 20, c = 25, circ = 2 * Math.PI * r;
+  const arc = (score / 10) * circ;
+  return `<div class="score-ring" style="--sc:${color}">
+    <svg viewBox="0 0 50 50" width="50" height="50">
+      <circle class="score-ring-bg" cx="${c}" cy="${c}" r="${r}" fill="none" stroke-width="4"/>
+      <circle class="score-ring-fill" cx="${c}" cy="${c}" r="${r}" fill="none" stroke-width="4"
+        stroke-dasharray="${arc} ${circ - arc}"/>
+    </svg>
+    <div style="text-align:center">
+      <div class="score-num" style="color:${color}">${score}</div>
+      <div class="score-den">/10</div>
+    </div>
+  </div>`;
+}
+
+// ─────────────────────────────────────────────
+//  Card
+// ─────────────────────────────────────────────
+function card(job) {
+  const color  = scoreColor(job.relevance_score);
+  const isNew  = job.first_seen === latestDate;
+  const cat    = category(job.title);
+  const salary = job.salary ? `<div class="card-salary">${esc(job.salary)}</div>` : '';
+  const reason = job.relevance_reason
+    ? `<div class="card-reason">${esc(job.relevance_reason)}</div>` : '';
+  const dateStr = job.first_seen
+    ? (isNew ? '🟢 New today' : `Seen ${job.first_seen}`) : '';
+
+  return `<div class="job-card" style="--sc:${color}">
+    <div class="card-head">
+      <div class="card-info">
+        <div class="card-badges">
+          ${isNew ? '<span class="badge badge-new">◉ NEW</span>' : ''}
+          <span class="badge ${sourceClass(job.source)}">${esc(job.source)}</span>
+          <span class="badge badge-cat">${esc(cat)}</span>
+        </div>
+        <div class="card-title">${esc(job.title)}</div>
+        <div class="card-company">${esc(job.company)}</div>
+        <div class="card-location">📍 ${esc(job.location)}</div>
       </div>
-      <span id="lastUpdated" class="text-xs text-gray-400"></span>
+      ${scoreRing(job.relevance_score, color)}
     </div>
-  </header>
-
-  <main class="max-w-5xl mx-auto px-4 py-6">
-
-    <!-- Filter bar -->
-    <div class="bg-white rounded-xl border shadow-sm p-4 mb-5 flex flex-wrap gap-3 items-center">
-      <input id="search" type="text" placeholder="Search title, company, reason…"
-        class="flex-1 min-w-48 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-
-      <select id="regionFilter"
-        class="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <option value="">All regions</option>
-        <option value="South Africa">South Africa</option>
-        <option value="Ireland">Ireland</option>
-      </select>
-
-      <select id="sourceFilter"
-        class="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <option value="">All sources</option>
-      </select>
-
-      <div class="flex items-center gap-2">
-        <label class="text-sm text-gray-500 whitespace-nowrap">Min score</label>
-        <input id="minScore" type="range" min="4" max="10" value="6" class="w-24 accent-blue-600" />
-        <span id="minScoreVal" class="text-sm font-semibold w-4 text-blue-600">6</span>
-      </div>
+    ${reason}
+    <div class="card-foot">
+      <div>${salary}<div class="card-date">${dateStr}</div></div>
+      <a href="${esc(job.url)}" target="_blank" rel="noopener" class="apply-btn">Apply →</a>
     </div>
+  </div>`;
+}
 
-    <!-- Stats bar -->
-    <p id="stats" class="text-sm text-gray-500 mb-4"></p>
+// ─────────────────────────────────────────────
+//  Charts
+// ─────────────────────────────────────────────
+Chart.defaults.color = '#3d4d63';
+Chart.defaults.borderColor = '#1e2230';
+Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+Chart.defaults.font.size = 11;
 
-    <!-- Cards -->
-    <div id="listings" class="space-y-3"></div>
-
-    <!-- Empty state -->
-    <div id="empty" class="hidden text-center py-20 text-gray-400">
-      <svg class="mx-auto mb-4 w-12 h-12 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-          d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-      <p class="text-lg font-medium">No listings match your filters.</p>
-      <p class="text-sm mt-1">Try lowering the minimum score or clearing the search.</p>
-    </div>
-
-    <!-- Loading state -->
-    <div id="loading" class="text-center py-20 text-gray-400">
-      <p class="text-lg">Loading listings…</p>
-    </div>
-
-  </main>
-
-  <script>
-    let allJobs = [];
-
-    // -----------------------------------------------------------------------
-    // Rendering helpers
-    // -----------------------------------------------------------------------
-
-    function scoreClass(s) {
-      if (s >= 8) return 'score-high';
-      if (s >= 6) return 'score-mid';
-      return 'score-low';
-    }
-
-    function sourceClass(src) {
-      if (src === 'LinkedIn')  return 'src-linkedin';
-      if (src === 'Careers24') return 'src-careers24';
-      return 'src-other';
-    }
-
-    function esc(str) {
-      return String(str)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-
-    function renderCard(job) {
-      const salary = job.salary
-        ? `<span class="inline-block text-green-700 text-xs font-semibold bg-green-50 px-2 py-0.5 rounded-full">${esc(job.salary)}</span>`
-        : '';
-      const reason = job.relevance_reason
-        ? `<p class="text-sm text-gray-500 italic mt-2 leading-snug">${esc(job.relevance_reason)}</p>`
-        : '';
-      const dateLabel = job.first_seen
-        ? `Seen ${job.first_seen}`
-        : (job.date_posted ? `Posted ${job.date_posted}` : '');
-
-      return `
-        <article class="bg-white rounded-xl border shadow-sm p-5 hover:shadow-md transition-shadow">
-          <div class="flex items-start gap-4">
-            <div class="flex-1 min-w-0">
-              <div class="flex flex-wrap items-center gap-2 mb-1">
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${scoreClass(job.relevance_score)}">
-                  ${job.relevance_score}/10
-                </span>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-medium ${sourceClass(job.source)}">
-                  ${esc(job.source)}
-                </span>
-                ${salary}
-              </div>
-              <h2 class="text-base font-semibold text-gray-900 leading-tight">${esc(job.title)}</h2>
-              <p class="text-sm text-gray-600 mt-0.5">
-                ${esc(job.company)}
-                <span class="text-gray-400 mx-1">·</span>
-                <span class="text-gray-500">${esc(job.location)}</span>
-              </p>
-              ${reason}
-            </div>
-            <div class="flex flex-col items-end gap-2 shrink-0">
-              <a href="${esc(job.url)}" target="_blank" rel="noopener noreferrer"
-                 class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 active:bg-blue-800 transition-colors whitespace-nowrap">
-                Apply →
-              </a>
-              <span class="text-xs text-gray-400">${dateLabel}</span>
-            </div>
-          </div>
-        </article>`;
-    }
-
-    // -----------------------------------------------------------------------
-    // Filter + render
-    // -----------------------------------------------------------------------
-
-    function render() {
-      const query  = document.getElementById('search').value.toLowerCase().trim();
-      const region = document.getElementById('regionFilter').value;
-      const source = document.getElementById('sourceFilter').value;
-      const minScore = parseInt(document.getElementById('minScore').value, 10);
-
-      const filtered = allJobs.filter(j => {
-        if (j.relevance_score < minScore) return false;
-        if (region && !j.location.includes(region)) return false;
-        if (source && j.source !== source) return false;
-        if (query) {
-          const hay = [j.title, j.company, j.relevance_reason, j.location]
-            .join(' ').toLowerCase();
-          if (!hay.includes(query)) return false;
-        }
-        return true;
-      });
-
-      const container = document.getElementById('listings');
-      const empty     = document.getElementById('empty');
-      const stats     = document.getElementById('stats');
-
-      stats.textContent = `Showing ${filtered.length} of ${allJobs.length} listing${allJobs.length !== 1 ? 's' : ''}`;
-
-      if (filtered.length === 0) {
-        container.innerHTML = '';
-        empty.classList.remove('hidden');
-      } else {
-        empty.classList.add('hidden');
-        container.innerHTML = filtered.map(renderCard).join('');
+function rebuildCharts(jobs) {
+  // Score distribution
+  const buckets = [4,5,6,7,8,9,10].map(s => jobs.filter(j => j.relevance_score === s).length);
+  destroyChart('score');
+  charts.score = new Chart(document.getElementById('chartScore'), {
+    type: 'bar',
+    data: {
+      labels: ['4','5','6','7','8','9','10'],
+      datasets: [{ data: buckets, borderRadius: 4, borderSkipped: false,
+        backgroundColor: ['#ef4444','#f97316','#eab308','#84cc16','#22c55e','#16a34a','#15803d'] }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: c => ` ${c.parsed.y} listing${c.parsed.y!==1?'s':''}` } } },
+      scales: {
+        x: { grid: { color: '#1e2230' } },
+        y: { grid: { color: '#1e2230' }, ticks: { stepSize: 1 } }
       }
     }
+  });
 
-    // -----------------------------------------------------------------------
-    // Initialise
-    // -----------------------------------------------------------------------
-
-    async function init() {
-      try {
-        const resp = await fetch('data/jobs.json');
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        allJobs = await resp.json();
-      } catch (e) {
-        allJobs = [];
-        console.warn('Could not load jobs.json:', e);
-      }
-
-      document.getElementById('loading').remove();
-
-      // Populate source dropdown from data
-      const sources = [...new Set(allJobs.map(j => j.source))].sort();
-      const srcSel = document.getElementById('sourceFilter');
-      sources.forEach(s => {
-        const opt = document.createElement('option');
-        opt.value = s;
-        opt.textContent = s;
-        srcSel.appendChild(opt);
-      });
-
-      // Show when the data was last generated
-      if (allJobs.length > 0) {
-        const dates = allJobs.map(j => j.last_seen).filter(Boolean).sort().reverse();
-        if (dates.length) {
-          document.getElementById('lastUpdated').textContent = `Last updated ${dates[0]}`;
-        }
-      }
-
-      // Wire up events
-      ['search', 'regionFilter', 'sourceFilter'].forEach(id =>
-        document.getElementById(id).addEventListener('input', render));
-
-      document.getElementById('minScore').addEventListener('input', e => {
-        document.getElementById('minScoreVal').textContent = e.target.value;
-        render();
-      });
-
-      render();
+  // Role category doughnut
+  const roleMap = {};
+  jobs.forEach(j => { const c = category(j.title); roleMap[c] = (roleMap[c]||0)+1; });
+  const roleEntries = Object.entries(roleMap).sort((a,b)=>b[1]-a[1]);
+  destroyChart('role');
+  charts.role = new Chart(document.getElementById('chartRole'), {
+    type: 'doughnut',
+    data: {
+      labels: roleEntries.map(e=>e[0]),
+      datasets: [{ data: roleEntries.map(e=>e[1]), borderColor:'#0b0d13', borderWidth:2,
+        backgroundColor:['#0ea5e9','#a855f7','#22c55e','#f97316','#eab308','#06b6d4','#ec4899'] }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '58%',
+      plugins: { legend: { position:'right', labels:{ color:'#94a3b8', boxWidth:9, padding:7 } } }
     }
+  });
 
-    init();
-  </script>
+  // Region bar
+  const regionMap = {};
+  jobs.forEach(j => {
+    const r = j.location.includes('South Africa') ? '🇿🇦 South Africa'
+            : j.location.includes('Ireland')       ? '🇮🇪 Ireland' : '🌍 Other';
+    regionMap[r] = (regionMap[r]||0)+1;
+  });
+  const rE = Object.entries(regionMap).sort((a,b)=>b[1]-a[1]);
+  destroyChart('region');
+  charts.region = new Chart(document.getElementById('chartRegion'), {
+    type: 'bar',
+    data: {
+      labels: rE.map(e=>e[0]),
+      datasets: [{ data: rE.map(e=>e[1]), borderRadius: 5, borderSkipped: false,
+        backgroundColor: ['#0ea5e9','#22c55e','#f97316'] }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#1e2230' }, ticks: { stepSize: 1 } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+}
 
+function destroyChart(k) { if (charts[k]) { charts[k].destroy(); delete charts[k]; } }
+
+// ─────────────────────────────────────────────
+//  Company chips
+// ─────────────────────────────────────────────
+function buildCompanyChips(jobs) {
+  const cmap = {};
+  jobs.forEach(j => { cmap[j.company] = (cmap[j.company]||0)+1; });
+  const sorted = Object.entries(cmap).sort((a,b)=>b[1]-a[1]).slice(0,40);
+  document.getElementById('coStrip').innerHTML = sorted.map(([co, n]) =>
+    `<div class="co-chip${activeCompany===co?' active':''}" onclick="toggleCompany(${JSON.stringify(esc(co))})">
+      ${esc(co)}<span class="co-chip-count">${n}</span>
+    </div>`
+  ).join('');
+}
+
+function toggleCompany(co) {
+  activeCompany = activeCompany === co ? '' : co;
+  buildCompanyChips(ALL);
+  render();
+}
+
+// ─────────────────────────────────────────────
+//  Stats
+// ─────────────────────────────────────────────
+function updateStats() {
+  const newCount = ALL.filter(j => j.first_seen === latestDate).length;
+  const above    = ALL.filter(j => j.relevance_score >= 6);
+  const avg      = above.length
+    ? (above.reduce((s,j) => s+j.relevance_score, 0) / above.length).toFixed(1) : '—';
+  const top      = [...ALL].sort((a,b) => b.relevance_score - a.relevance_score)[0];
+  const sources  = [...new Set(ALL.map(j=>j.source))];
+
+  document.getElementById('sTotal').textContent = ALL.length;
+  document.getElementById('sNew').textContent   = '+' + newCount;
+  document.getElementById('sNewDate').textContent = latestDate || 'latest run';
+  document.getElementById('sAvg').textContent  = avg;
+  document.getElementById('sCos').textContent  = new Set(ALL.map(j=>j.company)).size;
+  document.getElementById('sSources').textContent = sources.length;
+  document.getElementById('sSourceNames').textContent = sources.join(' · ');
+  if (top) {
+    document.getElementById('sTopScore').textContent = top.relevance_score + '/10';
+    const t = top.title;
+    document.getElementById('sTopTitle').textContent = t.length>26 ? t.slice(0,23)+'…' : t;
+  }
+  document.getElementById('hdrDate').textContent   = latestDate ? `Last scan: ${latestDate}` : 'No data';
+  document.getElementById('hdrNew').textContent    = '+' + newCount;
+  document.getElementById('hdrTotal').textContent  = ALL.length;
+}
+
+// ─────────────────────────────────────────────
+//  Filter + render
+// ─────────────────────────────────────────────
+function getFiltered() {
+  const q   = document.getElementById('search').value.toLowerCase().trim();
+  const rol = document.getElementById('fRole').value;
+  const reg = document.getElementById('fRegion').value;
+  const src = document.getElementById('fSource').value;
+  const min = parseInt(document.getElementById('minScore').value, 10);
+  const nw  = document.getElementById('newOnly').checked;
+  const srt = document.getElementById('fSort').value;
+
+  let jobs = ALL.filter(j => {
+    if (j.relevance_score < min) return false;
+    if (nw  && j.first_seen !== latestDate) return false;
+    if (reg && !j.location.includes(reg))  return false;
+    if (src && j.source !== src)           return false;
+    if (rol && category(j.title) !== rol)  return false;
+    if (activeCompany && j.company !== activeCompany) return false;
+    if (q) {
+      const hay = [j.title, j.company, j.relevance_reason, j.location].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const sortFns = {
+    score:   (a,b) => b.relevance_score - a.relevance_score || (b.first_seen||'').localeCompare(a.first_seen||''),
+    date:    (a,b) => (b.first_seen||'').localeCompare(a.first_seen||'') || b.relevance_score - a.relevance_score,
+    company: (a,b) => a.company.localeCompare(b.company),
+    alpha:   (a,b) => a.title.localeCompare(b.title),
+  };
+  jobs.sort(sortFns[srt] || sortFns.score);
+  return jobs;
+}
+
+function countActiveFilters() {
+  let n = 0;
+  if (document.getElementById('search').value.trim())     n++;
+  if (document.getElementById('fRole').value)             n++;
+  if (document.getElementById('fRegion').value)           n++;
+  if (document.getElementById('fSource').value)           n++;
+  if (parseInt(document.getElementById('minScore').value,10) > 4) n++;
+  if (document.getElementById('newOnly').checked)         n++;
+  if (activeCompany)                                       n++;
+  return n;
+}
+
+function render() {
+  const filtered = getFiltered();
+
+  // Results bar
+  const ct = document.getElementById('resultsCt');
+  ct.innerHTML = `<strong>${filtered.length}</strong> listing${filtered.length!==1?'s':''} &nbsp;·&nbsp; ${ALL.length} total indexed`;
+
+  const active = countActiveFilters();
+  const badge  = document.getElementById('filterBadge');
+  badge.textContent = active;
+  badge.classList.toggle('visible', active > 0);
+  document.getElementById('clearBtn').classList.toggle('visible', active > 0);
+
+  // Cards
+  const grid = document.getElementById('cardsGrid');
+  grid.innerHTML = filtered.length
+    ? filtered.map(card).join('')
+    : `<div class="empty-state"><h3>No listings match your filters.</h3>
+         <p>Try lowering the minimum score or clearing a filter.</p></div>`;
+
+  // Charts update to reflect current filter
+  rebuildCharts(filtered);
+}
+
+function clearFilters() {
+  document.getElementById('search').value  = '';
+  document.getElementById('fRole').value   = '';
+  document.getElementById('fRegion').value = '';
+  document.getElementById('fSource').value = '';
+  document.getElementById('fSort').value   = 'score';
+  document.getElementById('minScore').value = '4';
+  document.getElementById('minScoreVal').textContent = '4';
+  document.getElementById('newOnly').checked = false;
+  activeCompany = '';
+  buildCompanyChips(ALL);
+  render();
+}
+
+// ─────────────────────────────────────────────
+//  Supabase config — fill these in once, then commit.
+//  Get values from: Supabase → Project Settings → API
+//  The anon key is safe to commit — it's public by design.
+// ─────────────────────────────────────────────
+const SUPABASE_URL      = 'https://YOUR_PROJECT_REF.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const DAYS_TO_SHOW      = 90;
+const MIN_SCORE         = 4;
+
+async function fetchJobs() {
+  if (SUPABASE_URL.includes('YOUR_PROJECT_REF')) {
+    // Config not yet filled in — show setup prompt
+    document.getElementById('cardsGrid').innerHTML = `
+      <div class="empty-state">
+        <h3>⚙️ One-time setup required</h3>
+        <p>Open <code>docs/index.html</code> and fill in your
+           <strong>SUPABASE_URL</strong> and <strong>SUPABASE_ANON_KEY</strong>
+           at the top of the &lt;script&gt; block, then commit.</p>
+        <p style="margin-top:10px;font-size:12px;color:var(--text-2)">
+          Find both values in Supabase → Project Settings → API</p>
+      </div>`;
+    return [];
+  }
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - DAYS_TO_SHOW);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+
+  const url = new URL(`${SUPABASE_URL}/rest/v1/job_listings`);
+  url.searchParams.set('select', 'id,title,company,location,url,salary,date_posted,source,relevance_score,relevance_reason,first_seen,last_seen');
+  url.searchParams.set('relevance_score', `gte.${MIN_SCORE}`);
+  url.searchParams.set('last_seen', `gte.${cutoffStr}`);
+  url.searchParams.set('order', 'relevance_score.desc,first_seen.desc');
+  url.searchParams.set('limit', '1000');
+
+  const resp = await fetch(url.toString(), {
+    headers: {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    }
+  });
+
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`Supabase ${resp.status}: ${body}`);
+  }
+  return resp.json();
+}
+
+// ─────────────────────────────────────────────
+//  Init
+// ─────────────────────────────────────────────
+async function init() {
+  try {
+    ALL = await fetchJobs();
+  } catch(e) {
+    ALL = [];
+    console.error('Failed to load data from Supabase:', e);
+    document.getElementById('cardsGrid').innerHTML = `
+      <div class="empty-state">
+        <h3>Connection error</h3>
+        <p>${e.message}</p>
+        <p style="margin-top:8px;font-size:12px;color:var(--text-2)">
+          Check that RLS is enabled and a public SELECT policy exists.</p>
+      </div>`;
+  }
+
+  const dates = ALL.map(j=>j.first_seen).filter(Boolean).sort();
+  latestDate  = dates[dates.length - 1] || '';
+
+  // Populate dropdowns
+  const roles = [...new Set(ALL.map(j=>category(j.title)))].sort();
+  const roleSel = document.getElementById('fRole');
+  roles.forEach(r => roleSel.innerHTML += `<option value="${esc(r)}">${esc(r)}</option>`);
+
+  const srcs = [...new Set(ALL.map(j=>j.source))].sort();
+  const srcSel = document.getElementById('fSource');
+  srcs.forEach(s => srcSel.innerHTML += `<option value="${esc(s)}">${esc(s)}</option>`);
+
+  buildCompanyChips(ALL);
+  updateStats();
+
+  // Events
+  ['search','fRole','fRegion','fSource','fSort'].forEach(id =>
+    document.getElementById(id).addEventListener('input', render));
+  document.getElementById('newOnly').addEventListener('change', render);
+  document.getElementById('minScore').addEventListener('input', e => {
+    document.getElementById('minScoreVal').textContent = e.target.value;
+    render();
+  });
+
+  // Press / to focus search
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+      e.preventDefault();
+      document.getElementById('search').focus();
+    }
+    if (e.key === 'Escape') clearFilters();
+  });
+
+  render();
+}
+
+init();
+</script>
 </body>
 </html>
