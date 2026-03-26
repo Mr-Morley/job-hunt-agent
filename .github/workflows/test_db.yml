@@ -1,0 +1,60 @@
+name: Test DB Connection
+
+on:
+  workflow_dispatch:  # manual trigger only
+
+jobs:
+  test-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install psycopg2
+        run: pip install psycopg2-binary
+
+      - name: Test database connection
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python3 - <<'EOF'
+          import os, sys
+          import psycopg2
+
+          raw = os.environ.get("DATABASE_URL", "")
+          if not raw:
+              print("ERROR: DATABASE_URL secret is not set")
+              sys.exit(1)
+
+          # normalise postgres:// → postgresql://
+          dsn = raw if not raw.startswith("postgres://") \
+                    else "postgresql://" + raw[len("postgres://"):]
+
+          print(f"Connecting to: {dsn.split('@')[-1]}")  # print host only, not password
+
+          try:
+              conn = psycopg2.connect(dsn)
+              cur = conn.cursor()
+              cur.execute("SELECT version();")
+              version = cur.fetchone()[0]
+              print(f"Connected! PostgreSQL version: {version}")
+              cur.execute("""
+                  SELECT table_name FROM information_schema.tables
+                  WHERE table_schema = 'public'
+              """)
+              tables = [r[0] for r in cur.fetchall()]
+              print(f"Tables in public schema: {tables or '(none yet)'}")
+              conn.close()
+              print("OK — database connection is working.")
+          except Exception as e:
+              print(f"FAILED: {e}")
+              sys.exit(1)
+          EOF
