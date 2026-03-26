@@ -1,0 +1,47 @@
+name: Daily Job Scan
+
+on:
+  schedule:
+    # 08:00 UTC every day
+    - cron: "0 8 * * *"
+  workflow_dispatch:  # allow manual trigger from the Actions UI
+
+permissions:
+  contents: write   # needed to commit docs/data/jobs.json back to the repo
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run job scan
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DATABASE_URL:      ${{ secrets.DATABASE_URL }}
+          EMAIL_SENDER:      ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD:    ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECIPIENT:   ${{ secrets.EMAIL_RECIPIENT }}
+        run: python -m src.main
+
+      - name: Commit updated job listings
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/jobs.json
+          # Only commit if the file actually changed
+          git diff --staged --quiet || \
+            git commit -m "chore: update job listings $(date -u +%Y-%m-%d) [skip ci]"
+          git push
