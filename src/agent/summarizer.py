@@ -29,12 +29,58 @@ You will receive a list of scored job listings.  Write:
    - Job title and company (bold)
    - Location and salary (if known)
    - One-sentence reason why it's relevant
-   - The URL as a clickable link
-4. A closing encouragement sentence.
+   - The URL as a clickable "Apply" link
 
-Format the output as clean HTML suitable for an email body (use <h2>, <ul>,
-<li>, <a href="...">, <strong>, <p> tags).  Do not include <html>/<body>/<head>.
+Format the output as clean HTML suitable for an email body.
+Use only: <h2>, <ul>, <li>, <a href="...">, <strong>, <em>, <p> tags.
+Do NOT include <html>, <body>, <head>, or any inline styles — those are
+added by the template wrapper.
 Keep the tone friendly and professional.
+"""
+
+_HTML_TEMPLATE = """\
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0">
+  <tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+
+      <!-- Header -->
+      <tr><td style="background:#1d4ed8;padding:28px 32px">
+        <h1 style="margin:0;color:#ffffff;font-size:22px">Job Hunt Digest</h1>
+        <p style="margin:6px 0 0;color:#bfdbfe;font-size:14px">{date_label}</p>
+      </td></tr>
+
+      {pages_banner}
+
+      <!-- Body -->
+      <tr><td style="padding:28px 32px;color:#111827;font-size:15px;line-height:1.6">
+        {body_html}
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb">
+        <p style="margin:0;font-size:12px;color:#6b7280;text-align:center">
+          Powered by Claude · listings sourced from LinkedIn &amp; Careers24
+        </p>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>
+"""
+
+_PAGES_BANNER = """\
+<tr><td style="background:#eff6ff;padding:14px 32px;border-bottom:1px solid #bfdbfe">
+  <p style="margin:0;font-size:14px;color:#1e40af">
+    Browse the full board with filters:&nbsp;
+    <a href="{pages_url}" style="color:#1d4ed8;font-weight:bold">{pages_url}</a>
+  </p>
+</td></tr>
 """
 
 
@@ -49,11 +95,15 @@ class DigestResult:
 class JobSummarizer:
     """
     Generates a daily HTML digest from a list of scored JobListings.
+
+    Pass pages_url to include a "View Full Board" banner linking to the
+    GitHub Pages job board at the top of every email.
     """
 
-    def __init__(self, *, model: str = "claude-opus-4-6") -> None:
+    def __init__(self, *, model: str = "claude-opus-4-6", pages_url: str = "") -> None:
         self._client = anthropic.Anthropic()
         self._model = model
+        self._pages_url = pages_url
 
     def generate_digest(self, listings: list[JobListing]) -> DigestResult:
         """
@@ -74,12 +124,13 @@ class JobSummarizer:
         prompt = self._build_prompt(sorted_listings)
 
         try:
-            html_body = self._call_api(prompt)
+            body_html = self._call_api(prompt)
         except Exception as exc:
             logger.error("Summarizer API call failed: %s", exc)
-            html_body = self._fallback_html(sorted_listings)
+            body_html = self._fallback_html(sorted_listings)
 
-        plain_body = self._html_to_plain(html_body, sorted_listings)
+        html_body = self._wrap_template(body_html)
+        plain_body = self._html_to_plain(body_html, sorted_listings)
 
         return DigestResult(
             html_body=html_body,
@@ -91,6 +142,19 @@ class JobSummarizer:
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
+
+    def _wrap_template(self, body_html: str) -> str:
+        today = date.today().strftime("%A, %d %B %Y")
+        pages_banner = (
+            _PAGES_BANNER.format(pages_url=self._pages_url)
+            if self._pages_url
+            else ""
+        )
+        return _HTML_TEMPLATE.format(
+            date_label=today,
+            pages_banner=pages_banner,
+            body_html=body_html,
+        )
 
     def _build_prompt(self, listings: list[JobListing]) -> str:
         today = date.today().strftime("%A, %d %B %Y")

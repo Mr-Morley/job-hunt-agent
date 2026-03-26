@@ -121,7 +121,11 @@ class JobRepository:
     """
 
     def __init__(self, database_url: str | None = None) -> None:
-        self._dsn = database_url or os.environ["DATABASE_URL"]
+        raw = database_url or os.environ["DATABASE_URL"]
+        # psycopg2 requires postgresql:// — Supabase gives postgres://
+        if raw.startswith("postgres://"):
+            raw = "postgresql://" + raw[len("postgres://"):]
+        self._dsn = raw
         self._ensure_table()
         logger.info("JobRepository connected to database.")
 
@@ -162,6 +166,18 @@ class JobRepository:
                 cur.execute(_MARK_NOTIFIED, {"ids": listing_ids})
             conn.commit()
         logger.info("Marked %d listing(s) as notified.", len(listing_ids))
+
+    def get_scored_ids(self, ids: list[str]) -> set[str]:
+        """Return which of the given listing IDs are already scored in the DB."""
+        if not ids:
+            return set()
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM job_listings WHERE id = ANY(%s) AND relevance_score > 0",
+                    (ids,),
+                )
+                return {row[0] for row in cur.fetchall()}
 
     def export_recent(self, *, days: int = 90, min_score: int = 4) -> list[dict]:
         """

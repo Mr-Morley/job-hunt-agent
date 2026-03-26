@@ -34,6 +34,7 @@ jobs:
           EMAIL_SENDER:      ${{ secrets.EMAIL_SENDER }}
           EMAIL_PASSWORD:    ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_RECIPIENT:   ${{ secrets.EMAIL_RECIPIENT }}
+          PAGES_URL:         ${{ secrets.PAGES_URL }}
         run: python -m src.main
 
       - name: Commit updated job listings

@@ -107,21 +107,44 @@ def run_scrapers() -> list[JobListing]:
 # Classification
 # ---------------------------------------------------------------------------
 
-def classify(listings: list[JobListing]) -> list[JobListing]:
-    """Score every listing; return ALL scored listings (not filtered yet)."""
+def classify(
+    listings: list[JobListing], skip_ids: set[str] | None = None
+) -> list[JobListing]:
+    """
+    Score listings via the classifier API.
+
+    Listings whose IDs are in *skip_ids* are returned as-is (score stays 0;
+    the DB upsert will use GREATEST to keep the existing stored score).
+    This avoids re-paying for classification of listings seen on prior days.
+    """
     if not listings:
         return []
-    logger.info("Classifying %d listing(s)…", len(listings))
-    classifier = JobClassifier()
-    scored = classifier.score_many(listings, SEARCH_CONFIG)
-    above = sum(1 for j in scored if j.relevance_score >= SEARCH_CONFIG.min_score)
-    logger.info(
-        "%d/%d listing(s) at or above threshold (min score %d)",
-        above,
-        len(scored),
-        SEARCH_CONFIG.min_score,
-    )
-    return scored
+
+    if skip_ids:
+        to_score = [l for l in listings if l.id not in skip_ids]
+        already_known = [l for l in listings if l.id in skip_ids]
+        logger.info(
+            "Skipping %d already-scored listing(s); classifying %d new ones.",
+            len(already_known),
+            len(to_score),
+        )
+    else:
+        to_score = listings
+        already_known = []
+
+    if to_score:
+        classifier = JobClassifier()
+        scored_new = classifier.score_many(to_score, SEARCH_CONFIG)
+        above = sum(1 for j in scored_new if j.relevance_score >= SEARCH_CONFIG.min_score)
+        logger.info(
+            "%d/%d new listing(s) at or above threshold (min score %d)",
+            above, len(scored_new), SEARCH_CONFIG.min_score,
+        )
+    else:
+        scored_new = []
+        logger.info("No new listings to classify.")
+
+    return scored_new + already_known
 
 
 # ---------------------------------------------------------------------------
@@ -177,8 +200,12 @@ def main(argv: list[str] | None = None) -> int:
         logger.warning("No listings scraped — exiting early.")
         return 0
 
-    # 2. Classify (all listings, not pre-filtered)
-    scored = classify(raw_listings)
+    # 2. Classify — skip listings already scored in the DB
+    repo = _get_repo()
+    skip_ids: set[str] = set()
+    if repo:
+        skip_ids = repo.get_scored_ids([l.id for l in raw_listings])
+    scored = classify(raw_listings, skip_ids=skip_ids or None)
 
     if args.dry_run:
         logger.info("Dry-run mode — stopping before DB and summariser.")
@@ -189,18 +216,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     # 3. Persist to database (if configured)
-    repo = _get_repo()
     if repo:
         repo.upsert_many(scored)
         repo.delete_old(keep_days=365)
 
     # 4. Determine which listings to include in the digest
+    _MAX_DIGEST = 12  # cap Opus input — top picks only, sorted by score
     if repo:
         # Only listings never sent before
-        digest_listings = repo.get_unnotified(SEARCH_CONFIG.min_score)
+        digest_listings = repo.get_unnotified(SEARCH_CONFIG.min_score)[:_MAX_DIGEST]
     else:
         # Fallback: in-memory filter (listings are re-emailed each run)
-        digest_listings = [j for j in scored if j.relevance_score >= SEARCH_CONFIG.min_score]
+        digest_listings = sorted(
+            [j for j in scored if j.relevance_score >= SEARCH_CONFIG.min_score],
+            key=lambda j: j.relevance_score,
+            reverse=True,
+        )[:_MAX_DIGEST]
 
     if not digest_listings:
         logger.info("No new listings to include in the digest.")
@@ -210,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # 5. Summarise
     logger.info("Generating digest for %d listing(s)…", len(digest_listings))
-    summarizer = JobSummarizer()
+    summarizer = JobSummarizer(pages_url=os.getenv("PAGES_URL", ""))
     digest = summarizer.generate_digest(digest_listings)
     logger.info(
         "Digest ready: %d top picks, %d total.",
